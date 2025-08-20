@@ -1,6 +1,6 @@
+import "./globals.css";
 import { twMerge } from "tailwind-merge";
 import { GeistSans } from "geist/font/sans";
-import "./globals.css";
 
 type Props = {
 	children: React.ReactNode;
@@ -9,7 +9,12 @@ type Props = {
 export default function Layout({ children }: Props) {
 	return (
 		<html lang="en">
-			<body className={twMerge(GeistSans.className, "antialiased")}>
+			<body
+				className={twMerge(
+					GeistSans.className,
+					"antialiased min-h-svh flex flex-col",
+				)}
+			>
 				{children}
 			</body>
 		</html>
