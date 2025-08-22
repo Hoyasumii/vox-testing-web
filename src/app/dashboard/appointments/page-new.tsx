@@ -10,12 +10,9 @@ import { useToast } from "@/contexts/ToastContext";
 import { DoctorList } from "@/components/doctor-list";
 import { AvailabilityCalendar } from "@/components/availability-calendar";
 import { CalendarDays, FileText, UserCheck } from "lucide-react";
+import type { DoctorAvailabilityResponseDTO } from "@/dtos/availability/doctor-availability-response.dto";
 
-type DoctorAvailability = {
-	id: string;
-	date: string;
-	slots: { time: string; available: boolean }[];
-};
+type DoctorAvailability = DoctorAvailabilityResponseDTO;
 
 export default function AppointmentsPage() {
 	const [selectedDoctor, setSelectedDoctor] = useState<{
@@ -46,7 +43,7 @@ export default function AppointmentsPage() {
 			setSelectedSlot(null);
 			try {
 				const data = await listDoctorAvailability(selectedDoctor.id, date);
-				setAvailability(data as DoctorAvailability[]);
+				setAvailability(data);
 			} catch {
 				push({ message: "Falha ao buscar horários disponíveis", type: "error" });
 				setAvailability([]);
@@ -113,7 +110,7 @@ export default function AppointmentsPage() {
 			// Reload availability to reflect the new booking
 			if (selectedDoctor?.id) {
 				const data = await listDoctorAvailability(selectedDoctor.id, date);
-				setAvailability(data as DoctorAvailability[]);
+				setAvailability(data);
 			}
 		} catch {
 			push({ message: "Não foi possível agendar a consulta", type: "error" });

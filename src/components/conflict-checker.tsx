@@ -33,8 +33,7 @@ export function ConflictChecker({ selectedSlot, doctorId }: ConflictCheckerProps
 				const slotStillAvailable = slots.some(
 					slot => 
 						slot.availabilityId === selectedSlot.availabilityId &&
-						slot.availableDate === selectedSlot.availableDate &&
-						slot.isAvailable
+						slot.availableDate === selectedSlot.availableDate
 				);
 
 				if (!slotStillAvailable) {

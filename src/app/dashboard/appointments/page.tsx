@@ -84,7 +84,7 @@ export default function AppointmentsPage() {
 				day: "numeric",
 			});
 
-			const timeStr = `${selectedSlot.startHour.toString().padStart(2, '0')}:00 - ${selectedSlot.endHour.toString().padStart(2, '0')}:00`;
+			const timeStr = `${selectedSlot.startTime} - ${selectedSlot.endTime}`;
 
 			return `${dateStr}, ${timeStr}`;
 		} catch {

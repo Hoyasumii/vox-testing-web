@@ -41,7 +41,7 @@ export default function AvailabilityPage() {
 			
 			setLoading(true);
 			try {
-				const data = await listMyAvailability(user.id);
+				const data = await listMyAvailability();
 				setItems(data as AvailabilityUI[]);
 			} catch {
 				push({ message: "Falha ao carregar disponibilidades", type: "error" });
@@ -79,12 +79,12 @@ export default function AvailabilityPage() {
 		
 		try {
 			setSubmitting(true);
-			await createAvailability({ ...parsed.data, doctorId: user.id });
+			await createAvailability(parsed.data);
 			push({ message: "Disponibilidade criada", type: "success" });
 			e.currentTarget.reset();
 			// recarrega lista
 			try {
-				const data = await listMyAvailability(user.id);
+				const data = await listMyAvailability();
 				setItems(data as AvailabilityUI[]);
 			} catch {
 				/* ignore */
@@ -246,7 +246,7 @@ export default function AvailabilityPage() {
 												}
 												
 												try {
-													await updateAvailability(user.id, a.id, editValues);
+													await updateAvailability(a.id, editValues);
 													setItems((prev) =>
 														prev.map((p) =>
 															p.id === a.id ? { ...p, ...editValues } : p,
@@ -298,7 +298,7 @@ export default function AvailabilityPage() {
 												}
 												
 												try {
-													await deleteAvailability(user.id, a.id);
+													await deleteAvailability(a.id);
 													setItems((prev) => prev.filter((p) => p.id !== a.id));
 													push({ message: "Removido", type: "success" });
 												} catch {

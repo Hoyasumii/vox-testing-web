@@ -1,497 +1,533 @@
 "use client";
-import { useEffect, useState, type FormEvent } from "react";
-import { CreateDoctorAvailabilityDTO } from "@/dtos/availability/create-doctor-availability.dto";
-import {
-	listMyAvailability,
-	createAvailability,
-	updateAvailability,
-	deleteAvailability,
-} from "@/services/availability.service";
+
+import { useContext, useEffect, useState, useCallback } from "react";
+import { AuthContext } from "@/contexts/AuthContext";
+import { useToast } from "@/contexts/ToastContext";
+import { availabilityService } from "@/services/availability.service";
+import type { DoctorAvailabilityResponseDTO } from "@/dtos/availability";
+import type { CreateDoctorAvailabilityDTO } from "@/dtos/availability";
+import { DashboardHeader } from "@/components/dashboard-header";
 import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useToast } from "@/contexts/ToastContext";
-import { useAuth } from "@/contexts/AuthContext";
-import {
-	Calendar,
-	Clock,
-	Plus,
-	Edit,
-	Trash2,
-	Save,
-	X,
-	AlertCircle,
-} from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { Badge } from "@/components/ui/badge";
+import { Clock, Plus, Edit, Trash2, Save, X, Calendar } from "lucide-react";
 
-type AvailabilityUI = {
-	id: string;
-	date: string;
-	startTime: string;
-	endTime: string;
-	slotMinutes: number;
-	slots: { time: string; available: boolean }[];
+// Função para garantir formato HH:00
+const formatTimeToHour = (time: string): string => {
+	if (!time) return "";
+	const [hours] = time.split(":");
+	return `${hours.padStart(2, "0")}:00`;
+};
+
+// Função para formatar data para exibição
+const formatDateForDisplay = (date: string): string => {
+	try {
+		const dateObj = new Date(date + "T00:00:00");
+		return dateObj.toLocaleDateString("pt-BR", {
+			weekday: "long",
+			year: "numeric",
+			month: "long",
+			day: "numeric",
+		});
+	} catch {
+		return date;
+	}
+};
+
+// Função para obter data de hoje no formato YYYY-MM-DD
+const getTodayDate = (): string => {
+	const today = new Date();
+	return today.toISOString().split("T")[0];
 };
 
 export default function AvailabilityPage() {
-	const [items, setItems] = useState<AvailabilityUI[]>([]);
-	const [loading, setLoading] = useState(false);
-	const [submitting, setSubmitting] = useState(false);
-	const { push } = useToast();
-	const { user } = useAuth();
-	const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+	const { user } = useContext(AuthContext);
+	const { push: showToast } = useToast();
+
+	const [availabilities, setAvailabilities] = useState<
+		DoctorAvailabilityResponseDTO[]
+	>([]);
+	const [isLoading, setIsLoading] = useState(true);
+	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [editingId, setEditingId] = useState<string | null>(null);
-	const [editValues, setEditValues] = useState<{
-		startTime: string;
-		endTime: string;
-		slotMinutes: number;
-	}>({ startTime: "", endTime: "", slotMinutes: 30 });
 
-	const [formData, setFormData] = useState({
-		date: "",
-		startTime: "",
-		endTime: "",
-		slotMinutes: 30,
-	});
+	// Form states
+	const [selectedDate, setSelectedDate] = useState(getTodayDate());
+	const [startTime, setStartTime] = useState("");
+	const [endTime, setEndTime] = useState("");
+	const [slotMinutes, setSlotMinutes] = useState(60); // 1 hora por slot
 
-	const loadAvailabilities = async () => {
-		if (!user?.id) return;
-		
-		setLoading(true);
+	// Edit form states
+	const [editStartTime, setEditStartTime] = useState("");
+	const [editEndTime, setEditEndTime] = useState("");
+
+	const loadAvailabilities = useCallback(async () => {
 		try {
-			const data = await listMyAvailability(user.id);
-			setItems(data as AvailabilityUI[]);
-		} catch {
-			push({ message: "Falha ao carregar disponibilidades", type: "error" });
+			setIsLoading(true);
+			const response = await availabilityService.listMyAvailability();
+			setAvailabilities(response);
+		} catch (error) {
+			console.error("Erro ao carregar disponibilidades:", error);
+			showToast({
+				message: "Erro ao carregar disponibilidades",
+				type: "error",
+			});
 		} finally {
-			setLoading(false);
+			setIsLoading(false);
+		}
+	}, [showToast]);
+
+	useEffect(() => {
+		loadAvailabilities();
+	}, [loadAvailabilities]);
+
+	const validateForm = (): boolean => {
+		if (!selectedDate) {
+			showToast({ message: "Por favor, selecione uma data", type: "error" });
+			return false;
+		}
+		if (!startTime) {
+			showToast({
+				message: "Por favor, informe o horário de início",
+				type: "error",
+			});
+			return false;
+		}
+		if (!endTime) {
+			showToast({
+				message: "Por favor, informe o horário de fim",
+				type: "error",
+			});
+			return false;
+		}
+		if (startTime >= endTime) {
+			showToast({
+				message: "O horário de início deve ser menor que o horário de fim",
+				type: "error",
+			});
+			return false;
+		}
+
+		// Verificar se a data não é no passado
+		const selectedDateObj = new Date(selectedDate + "T00:00:00");
+		const today = new Date();
+		today.setHours(0, 0, 0, 0);
+
+		if (selectedDateObj < today) {
+			showToast({
+				message: "Não é possível criar disponibilidade para datas passadas",
+				type: "error",
+			});
+			return false;
+		}
+
+		return true;
+	};
+
+	const handleSubmit = async (e: React.FormEvent) => {
+		e.preventDefault();
+
+		if (!validateForm()) return;
+
+		try {
+			setIsSubmitting(true);
+
+			const formattedStartTime = formatTimeToHour(startTime);
+			const formattedEndTime = formatTimeToHour(endTime);
+
+			const data: CreateDoctorAvailabilityDTO = {
+				date: selectedDate,
+				startTime: formattedStartTime,
+				endTime: formattedEndTime,
+				slotMinutes,
+			};
+
+			// Debug logs
+			console.log("User ID:", user?.id);
+			console.log("User Type:", user?.type);
+			console.log("Creating availability with data:", data);
+
+			await availabilityService.createAvailability(data);
+
+			showToast({
+				message: "Disponibilidade criada com sucesso!",
+				type: "success",
+			});
+
+			// Reset form
+			setSelectedDate(getTodayDate());
+			setStartTime("");
+			setEndTime("");
+
+			// Reload data
+			await loadAvailabilities();
+		} catch (error) {
+			console.error("Erro ao criar disponibilidade:", error);
+			const message =
+				(error as { response?: { data?: { message?: string } } })?.response
+					?.data?.message || "Erro ao criar disponibilidade";
+			showToast({ message, type: "error" });
+		} finally {
+			setIsSubmitting(false);
 		}
 	};
 
-	useEffect(() => {
-		const loadData = async () => {
-			if (!user?.id) return;
-			
-			setLoading(true);
-			try {
-				const data = await listMyAvailability(user.id);
-				setItems(data as AvailabilityUI[]);
-			} catch {
-				push({ message: "Falha ao carregar disponibilidades", type: "error" });
-			} finally {
-				setLoading(false);
-			}
-		};
+	const handleEdit = (availability: DoctorAvailabilityResponseDTO) => {
+		setEditingId(availability.id);
+		setEditStartTime(availability.startTime);
+		setEditEndTime(availability.endTime);
+	};
 
-		loadData();
-	}, [push, user?.id]);
-
-	const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
-		e.preventDefault();
-
-		const parsed = CreateDoctorAvailabilityDTO.safeParse(formData);
-		if (!parsed.success) {
-			const errs: Record<string, string> = {};
-			for (const issue of parsed.error.issues) {
-				const key = issue.path.join(".") || "root";
-				errs[key] = issue.message;
-			}
-			setFieldErrors(errs);
-			push({ message: "Dados inválidos", type: "error" });
+	const handleSaveEdit = async (id: string) => {
+		if (!editStartTime || !editEndTime) {
+			showToast({
+				message: "Por favor, preencha todos os campos",
+				type: "error",
+			});
 			return;
 		}
 
-		setFieldErrors({});
-		try {
-			setSubmitting(true);
-			if (!user?.id) {
-				push({ message: "Usuário não identificado", type: "error" });
-				return;
-			}
-			await createAvailability({ ...parsed.data, doctorId: user.id });
-			push({ message: "Disponibilidade criada com sucesso", type: "success" });
+		if (editStartTime >= editEndTime) {
+			showToast({
+				message: "O horário de início deve ser menor que o horário de fim",
+				type: "error",
+			});
+			return;
+		}
 
-			// Reset form
-			setFormData({
-				date: "",
-				startTime: "",
-				endTime: "",
-				slotMinutes: 30,
+		try {
+			const formattedStartTime = formatTimeToHour(editStartTime);
+			const formattedEndTime = formatTimeToHour(editEndTime);
+
+			await availabilityService.updateAvailability(id, {
+				startTime: formattedStartTime,
+				endTime: formattedEndTime,
 			});
 
-			// Reload list
+			showToast({
+				message: "Disponibilidade atualizada com sucesso!",
+				type: "success",
+			});
+			setEditingId(null);
 			await loadAvailabilities();
-		} catch {
-			push({ message: "Erro ao criar disponibilidade", type: "error" });
-		} finally {
-			setSubmitting(false);
+		} catch (error) {
+			console.error("Erro ao atualizar disponibilidade:", error);
+			const message =
+				(error as { response?: { data?: { message?: string } } })?.response
+					?.data?.message || "Erro ao atualizar disponibilidade";
+			showToast({ message, type: "error" });
 		}
-	};
-
-	const handleEdit = (item: AvailabilityUI) => {
-		setEditingId(item.id);
-		setEditValues({
-			startTime: item.startTime,
-			endTime: item.endTime,
-			slotMinutes: item.slotMinutes,
-		});
 	};
 
 	const handleCancelEdit = () => {
 		setEditingId(null);
-		setEditValues({ startTime: "", endTime: "", slotMinutes: 30 });
+		setEditStartTime("");
+		setEditEndTime("");
 	};
 
-	const handleSaveEdit = async (itemId: string) => {
-		if (!user?.id) {
-			push({ message: "Usuário não identificado", type: "error" });
-			return;
-		}
-		
-		try {
-			await updateAvailability(user.id, itemId, editValues);
-			push({ message: "Disponibilidade atualizada", type: "success" });
-			setEditingId(null);
-			await loadAvailabilities();
-		} catch {
-			push({ message: "Erro ao atualizar disponibilidade", type: "error" });
-		}
-	};
-
-	const handleDelete = async (itemId: string) => {
+	const handleDelete = async (id: string) => {
 		if (!confirm("Tem certeza que deseja excluir esta disponibilidade?")) {
 			return;
 		}
 
-		if (!user?.id) {
-			push({ message: "Usuário não identificado", type: "error" });
-			return;
-		}
-
 		try {
-			await deleteAvailability(user.id, itemId);
-			push({ message: "Disponibilidade excluída", type: "success" });
-			await loadAvailabilities();
-		} catch {
-			push({ message: "Erro ao excluir disponibilidade", type: "error" });
-		}
-	};
-
-	const formatDate = (dateString: string) => {
-		try {
-			const date = new Date(dateString);
-			return date.toLocaleDateString("pt-BR", {
-				weekday: "long",
-				year: "numeric",
-				month: "long",
-				day: "numeric",
+			await availabilityService.deleteAvailability(id);
+			showToast({
+				message: "Disponibilidade excluída com sucesso!",
+				type: "success",
 			});
-		} catch {
-			return dateString;
+			await loadAvailabilities();
+		} catch (error) {
+			console.error("Erro ao excluir disponibilidade:", error);
+			const message =
+				(error as { response?: { data?: { message?: string } } })?.response
+					?.data?.message || "Erro ao excluir disponibilidade";
+			showToast({ message, type: "error" });
 		}
 	};
 
-	const getBookedSlotsCount = (
-		slots: { time: string; available: boolean }[],
-	) => {
-		return slots.filter((slot) => !slot.available).length;
-	};
+	// Agrupar disponibilidades por data
+	const groupedAvailabilities = availabilities.reduce(
+		(acc, item) => {
+			if (!acc[item.date]) {
+				acc[item.date] = [];
+			}
+			acc[item.date].push(item);
+			return acc;
+		},
+		{} as Record<string, DoctorAvailabilityResponseDTO[]>,
+	);
 
-	const getTotalSlotsCount = (
-		slots: { time: string; available: boolean }[],
-	) => {
-		return slots.length;
-	};
+	// Ordenar datas
+	const sortedDates = Object.keys(groupedAvailabilities).sort();
 
-	// Verifica se o usuário é um médico
-	if (user?.type !== "DOCTOR") {
+	if (isLoading) {
 		return (
-			<div className="p-6">
-				<Card>
-					<CardContent className="pt-6">
-						<div className="text-center py-8">
-							<AlertCircle className="size-12 mx-auto text-muted-foreground mb-4" />
-							<h3 className="font-medium mb-2">Acesso Restrito</h3>
-							<p className="text-sm text-muted-foreground">
-								Esta página é apenas para médicos.
-							</p>
-						</div>
-					</CardContent>
-				</Card>
+			<div className="min-h-screen bg-gray-50">
+				<div className="flex items-center justify-center h-96">
+					<LoadingSpinner />
+				</div>
 			</div>
 		);
 	}
 
 	return (
-		<div className="p-6 space-y-6">
-			<div className="flex items-center gap-2">
-				<Calendar className="size-6" />
-				<h1 className="text-2xl font-bold">Minhas Disponibilidades</h1>
-				{loading && (
-					<span className="animate-pulse text-sm text-muted-foreground">
-						carregando...
-					</span>
-				)}
-			</div>
+		<div className="min-h-screen bg-gray-50">
+			<div className="max-w-6xl mx-auto p-6 space-y-6">
+				<div className="flex items-center gap-3">
+					<Clock className="h-8 w-8 text-blue-600" />
+					<h1 className="text-3xl font-bold text-gray-900">
+						Gerenciar Disponibilidade
+					</h1>
+				</div>
 
-			{/* Form to Add New Availability */}
-			<Card>
-				<CardHeader>
-					<CardTitle className="flex items-center gap-2">
-						<Plus className="size-5" />
-						Adicionar Nova Disponibilidade
-					</CardTitle>
-				</CardHeader>
-				<CardContent>
-					<form onSubmit={onSubmit} className="space-y-4">
-						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-							<div className="space-y-2">
-								<Label htmlFor="date">Data</Label>
-								<input
-									id="date"
-									required
-									type="date"
-									value={formData.date}
-									onChange={(e) =>
-										setFormData((prev) => ({ ...prev, date: e.target.value }))
-									}
-									className="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
-									min={new Date().toISOString().split("T")[0]}
-								/>
-								{fieldErrors.date && (
-									<span className="text-xs text-red-600">
-										{fieldErrors.date}
-									</span>
-								)}
-							</div>
-
-							<div className="space-y-2">
-								<Label htmlFor="startTime">Horário de Início</Label>
-								<Input
-									id="startTime"
-									required
-									type="time"
-									value={formData.startTime}
-									onChange={(e) =>
-										setFormData((prev) => ({
-											...prev,
-											startTime: e.target.value,
-										}))
-									}
-									step={300}
-								/>
-								{fieldErrors.startTime && (
-									<span className="text-xs text-red-600">
-										{fieldErrors.startTime}
-									</span>
-								)}
-							</div>
-
-							<div className="space-y-2">
-								<Label htmlFor="endTime">Horário de Fim</Label>
-								<Input
-									id="endTime"
-									required
-									type="time"
-									value={formData.endTime}
-									onChange={(e) =>
-										setFormData((prev) => ({
-											...prev,
-											endTime: e.target.value,
-										}))
-									}
-									step={300}
-								/>
-								{fieldErrors.endTime && (
-									<span className="text-xs text-red-600">
-										{fieldErrors.endTime}
-									</span>
-								)}
-							</div>
-
-							<div className="space-y-2">
-								<Label htmlFor="slotMinutes">Duração (minutos)</Label>
-								<Input
-									id="slotMinutes"
-									type="number"
-									min={5}
-									max={240}
-									value={formData.slotMinutes}
-									onChange={(e) =>
-										setFormData((prev) => ({
-											...prev,
-											slotMinutes: Number(e.target.value),
-										}))
-									}
-									placeholder="30"
-								/>
-								{fieldErrors.slotMinutes && (
-									<span className="text-xs text-red-600">
-										{fieldErrors.slotMinutes}
-									</span>
-								)}
-							</div>
-						</div>
-
-						<Button type="submit" disabled={submitting} size="lg">
-							{submitting ? "Salvando..." : "Adicionar Disponibilidade"}
-						</Button>
-					</form>
-				</CardContent>
-			</Card>
-
-			{/* List of Existing Availabilities */}
-			<Card>
-				<CardHeader>
-					<CardTitle>Disponibilidades Cadastradas</CardTitle>
-				</CardHeader>
-				<CardContent>
-					{items.length === 0 ? (
-						<div className="text-center py-8">
-							<Clock className="size-12 mx-auto text-muted-foreground mb-4" />
-							<h3 className="font-medium mb-2">
-								Nenhuma disponibilidade cadastrada
-							</h3>
-							<p className="text-sm text-muted-foreground">
-								Adicione sua primeira disponibilidade usando o formulário acima.
-							</p>
-						</div>
-					) : (
-						<div className="space-y-4">
-							{items.map((item) => {
-								const bookedSlots = getBookedSlotsCount(item.slots);
-								const totalSlots = getTotalSlotsCount(item.slots);
-								const isEditing = editingId === item.id;
-
-								return (
-									<div
-										key={item.id}
-										className="border rounded-lg p-4 space-y-3"
+				{/* Formulário de Criação */}
+				<Card className="shadow-sm border-0 bg-white">
+					<CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b">
+						<CardTitle className="flex items-center gap-2 text-blue-900">
+							<Plus className="h-5 w-5" />
+							Adicionar Nova Disponibilidade
+						</CardTitle>
+					</CardHeader>
+					<CardContent className="p-6">
+						<form onSubmit={handleSubmit} className="space-y-4">
+							<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+								<div>
+									<Label
+										htmlFor="date"
+										className="text-sm font-medium text-gray-700"
 									>
-										<div className="flex items-center justify-between">
-											<div>
-												<h3 className="font-medium">{formatDate(item.date)}</h3>
-												<div className="flex items-center gap-4 text-sm text-muted-foreground">
-													{isEditing ? (
-														<div className="flex items-center gap-2">
-															<input
-																type="time"
-																value={editValues.startTime}
-																onChange={(e) =>
-																	setEditValues((v) => ({
-																		...v,
-																		startTime: e.target.value,
-																	}))
-																}
-																className="border rounded px-2 py-1 text-xs"
-															/>
-															<span>até</span>
-															<input
-																type="time"
-																value={editValues.endTime}
-																onChange={(e) =>
-																	setEditValues((v) => ({
-																		...v,
-																		endTime: e.target.value,
-																	}))
-																}
-																className="border rounded px-2 py-1 text-xs"
-															/>
-															<input
-																type="number"
-																min={5}
-																max={240}
-																value={editValues.slotMinutes}
-																onChange={(e) =>
-																	setEditValues((v) => ({
-																		...v,
-																		slotMinutes: Number(e.target.value),
-																	}))
-																}
-																className="border rounded px-2 py-1 text-xs w-16"
-															/>
-															<span>min</span>
-														</div>
-													) : (
-														<>
-															<span>
-																{item.startTime} - {item.endTime}
-															</span>
-															<span>•</span>
-															<span>{item.slotMinutes} min por consulta</span>
-															<span>•</span>
-															<span>
-																{bookedSlots}/{totalSlots} agendados
-															</span>
-														</>
-													)}
-												</div>
-											</div>
+										Data
+									</Label>
+									<Input
+										id="date"
+										type="date"
+										value={selectedDate}
+										min={getTodayDate()}
+										onChange={(e) => setSelectedDate(e.target.value)}
+										className="mt-1"
+										required
+									/>
+								</div>
 
-											<div className="flex items-center gap-2">
-												{isEditing ? (
-													<>
-														<Button
-															size="sm"
-															variant="default"
-															onClick={() => handleSaveEdit(item.id)}
-														>
-															<Save className="size-4" />
-														</Button>
-														<Button
-															size="sm"
-															variant="outline"
-															onClick={handleCancelEdit}
-														>
-															<X className="size-4" />
-														</Button>
-													</>
-												) : (
-													<>
-														<Button
-															size="sm"
-															variant="outline"
-															onClick={() => handleEdit(item)}
-														>
-															<Edit className="size-4" />
-														</Button>
-														<Button
-															size="sm"
-															variant="destructive"
-															onClick={() => handleDelete(item.id)}
-														>
-															<Trash2 className="size-4" />
-														</Button>
-													</>
-												)}
-											</div>
-										</div>
+								<div>
+									<Label
+										htmlFor="startTime"
+										className="text-sm font-medium text-gray-700"
+									>
+										Horário de Início
+									</Label>
+									<Input
+										id="startTime"
+										type="time"
+										step="3600"
+										value={startTime}
+										onChange={(e) => setStartTime(e.target.value)}
+										className="mt-1"
+										required
+									/>
+								</div>
 
-										{/* Slots visualization */}
-										<div className="space-y-2">
-											<h4 className="text-sm font-medium">Horários:</h4>
-											<div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
-												{item.slots.map((slot) => (
+								<div>
+									<Label
+										htmlFor="endTime"
+										className="text-sm font-medium text-gray-700"
+									>
+										Horário de Fim
+									</Label>
+									<Input
+										id="endTime"
+										type="time"
+										step="3600"
+										value={endTime}
+										onChange={(e) => setEndTime(e.target.value)}
+										className="mt-1"
+										required
+									/>
+								</div>
+
+								<div>
+									<Label
+										htmlFor="slotMinutes"
+										className="text-sm font-medium text-gray-700"
+									>
+										Duração dos Slots (min)
+									</Label>
+									<select
+										id="slotMinutes"
+										value={slotMinutes}
+										onChange={(e) => setSlotMinutes(Number(e.target.value))}
+										className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+									>
+										<option value={30}>30 minutos</option>
+										<option value={60}>1 hora</option>
+										<option value={90}>1h 30min</option>
+										<option value={120}>2 horas</option>
+									</select>
+								</div>
+							</div>
+
+							<div className="flex justify-end">
+								<Button
+									type="submit"
+									disabled={isSubmitting}
+									className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2"
+								>
+									{isSubmitting ? (
+										<>
+											<LoadingSpinner size={16} />
+											<span className="ml-2">Criando...</span>
+										</>
+									) : (
+										<>
+											<Plus className="h-4 w-4 mr-2" />
+											Adicionar Disponibilidade
+										</>
+									)}
+								</Button>
+							</div>
+						</form>
+					</CardContent>
+				</Card>
+
+				{/* Lista de Disponibilidades */}
+				<Card className="shadow-sm border-0 bg-white">
+					<CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 border-b">
+						<CardTitle className="text-green-900">
+							Minhas Disponibilidades ({availabilities.length})
+						</CardTitle>
+					</CardHeader>
+					<CardContent className="p-6">
+						{availabilities.length === 0 ? (
+							<div className="text-center py-12">
+								<Clock className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+								<p className="text-gray-500 text-lg">
+									Nenhuma disponibilidade cadastrada ainda.
+								</p>
+								<p className="text-gray-400 text-sm mt-2">
+									Use o formulário acima para adicionar sua primeira
+									disponibilidade.
+								</p>
+							</div>
+						) : (
+							<div className="space-y-6">
+								{sortedDates.map((date) => {
+									const dateAvailabilities = groupedAvailabilities[date] || [];
+
+									return (
+										<div key={date} className="space-y-3">
+											<h3 className="text-lg font-semibold text-gray-900 border-b pb-2 flex items-center gap-2">
+												<Calendar className="h-5 w-5 text-blue-600" />
+												{formatDateForDisplay(date)}
+											</h3>
+											<div className="grid gap-3">
+												{dateAvailabilities.map((availability) => (
 													<div
-														key={slot.time}
-														className={`px-2 py-1 rounded text-xs text-center border ${
-															slot.available
-																? "bg-green-50 border-green-200 text-green-800"
-																: "bg-red-50 border-red-200 text-red-800"
-														}`}
+														key={availability.id}
+														className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border"
 													>
-														{slot.time}
+														<div className="flex items-center gap-4">
+															<Badge
+																variant="outline"
+																className="bg-blue-50 text-blue-700 border-blue-200"
+															>
+																{availability.slotMinutes}min
+															</Badge>
+
+															{editingId === availability.id ? (
+																<div className="flex items-center gap-2">
+																	<Input
+																		type="time"
+																		step="3600"
+																		value={editStartTime}
+																		onChange={(e) =>
+																			setEditStartTime(e.target.value)
+																		}
+																		className="w-24"
+																	/>
+																	<span className="text-gray-500">às</span>
+																	<Input
+																		type="time"
+																		step="3600"
+																		value={editEndTime}
+																		onChange={(e) =>
+																			setEditEndTime(e.target.value)
+																		}
+																		className="w-24"
+																	/>
+																</div>
+															) : (
+																<span className="text-sm font-medium text-gray-700">
+																	{availability.startTime} às{" "}
+																	{availability.endTime}
+																</span>
+															)}
+
+															<Badge variant="secondary" className="text-xs">
+																{
+																	availability.slots.filter((s) => s.available)
+																		.length
+																}{" "}
+																slots livres
+															</Badge>
+														</div>
+
+														<div className="flex items-center gap-2">
+															{editingId === availability.id ? (
+																<>
+																	<Button
+																		size="sm"
+																		onClick={() =>
+																			handleSaveEdit(availability.id)
+																		}
+																		className="bg-green-600 hover:bg-green-700 text-white"
+																	>
+																		<Save className="h-4 w-4" />
+																	</Button>
+																	<Button
+																		size="sm"
+																		variant="outline"
+																		onClick={handleCancelEdit}
+																	>
+																		<X className="h-4 w-4" />
+																	</Button>
+																</>
+															) : (
+																<>
+																	<Button
+																		size="sm"
+																		variant="outline"
+																		onClick={() => handleEdit(availability)}
+																	>
+																		<Edit className="h-4 w-4" />
+																	</Button>
+																	<Button
+																		size="sm"
+																		variant="outline"
+																		onClick={() =>
+																			handleDelete(availability.id)
+																		}
+																		className="text-red-600 hover:text-red-700 hover:bg-red-50"
+																	>
+																		<Trash2 className="h-4 w-4" />
+																	</Button>
+																</>
+															)}
+														</div>
 													</div>
 												))}
 											</div>
 										</div>
-									</div>
-								);
-							})}
-						</div>
-					)}
-				</CardContent>
-			</Card>
+									);
+								})}
+							</div>
+						)}
+					</CardContent>
+				</Card>
+			</div>
 		</div>
 	);
 }

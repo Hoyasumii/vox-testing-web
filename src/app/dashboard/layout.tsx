@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { RealTimeNotifications } from "@/components/real-time-notifications";
 
 export default function DashboardLayout({
 	children,
@@ -43,7 +42,6 @@ export default function DashboardLayout({
 			<main className="flex-1 container mx-auto w-full max-w-5xl">
 				{children}
 			</main>
-			<RealTimeNotifications />
 		</div>
 	);
 }

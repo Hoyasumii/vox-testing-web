@@ -50,7 +50,7 @@ export default function AvailabilityPage() {
 		
 		setLoading(true);
 		try {
-			const data = await listMyAvailability(user.id);
+			const data = await listMyAvailability();
 			setItems(data as AvailabilityUI[]);
 		} catch {
 			push({ message: "Falha ao carregar disponibilidades", type: "error" });
@@ -65,7 +65,7 @@ export default function AvailabilityPage() {
 			
 			setLoading(true);
 			try {
-				const data = await listMyAvailability(user.id);
+				const data = await listMyAvailability();
 				setItems(data as AvailabilityUI[]);
 			} catch {
 				push({ message: "Falha ao carregar disponibilidades", type: "error" });
@@ -100,7 +100,7 @@ export default function AvailabilityPage() {
 		
 		try {
 			setSubmitting(true);
-			await createAvailability({ ...parsed.data, doctorId: user.id });
+			await createAvailability(parsed.data);
 			push({ message: "Disponibilidade criada com sucesso", type: "success" });
 			
 			// Reset form
@@ -141,7 +141,7 @@ export default function AvailabilityPage() {
 		}
 		
 		try {
-			await updateAvailability(user.id, itemId, editValues);
+			await updateAvailability(itemId, editValues);
 			push({ message: "Disponibilidade atualizada", type: "success" });
 			setEditingId(null);
 			await loadAvailabilities();
@@ -161,7 +161,7 @@ export default function AvailabilityPage() {
 		}
 		
 		try {
-			await deleteAvailability(user.id, itemId);
+			await deleteAvailability(itemId);
 			push({ message: "Disponibilidade excluída", type: "success" });
 			await loadAvailabilities();
 		} catch {

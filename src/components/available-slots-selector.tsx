@@ -48,7 +48,7 @@ export function AvailableSlotsSelector({
 			});
 
 			const availableSlots = await getAvailableSlots(filterParams);
-			setSlots(availableSlots.filter(slot => slot.isAvailable));
+			setSlots(availableSlots);
 		} catch (error) {
 			console.error("Erro ao buscar slots:", error);
 			setSlots([]);
@@ -79,11 +79,12 @@ export function AvailableSlotsSelector({
 		}
 	};
 
-	const formatTimeRange = (startHour: number, endHour: number) => {
-		return `${startHour.toString().padStart(2, '0')}:00 - ${endHour.toString().padStart(2, '0')}:00`;
+	const formatTimeRange = (startTime: string, endTime: string) => {
+		return `${startTime} - ${endTime}`;
 	};
 
-	const getDayName = (dayOfWeek: number) => {
+	const getDayName = (date: string) => {
+		const dayOfWeek = new Date(date).getDay();
 		const days = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 		return days[dayOfWeek];
 	};
@@ -201,12 +202,12 @@ export function AvailableSlotsSelector({
 													{formatDate(slot.availableDate)}
 												</span>
 												<Badge variant="outline">
-													{getDayName(slot.dayOfWeek)}
+													{getDayName(slot.availableDate)}
 												</Badge>
 											</div>
 											<div className="flex items-center gap-2 text-sm text-muted-foreground">
 												<Clock className="size-3" />
-												<span>{formatTimeRange(slot.startHour, slot.endHour)}</span>
+												<span>{formatTimeRange(slot.startTime, slot.endTime)}</span>
 											</div>
 										</div>
 										<div className="text-right">

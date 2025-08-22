@@ -12,49 +12,6 @@ export type AvailableSlot = {
 	doctorName: string;
 };
 
-// Export individual functions for compatibility
-export async function listMyAvailability() {
-	console.log("📋 Listando minhas disponibilidades");
-	const { data } = await axios.get<{
-		success: boolean;
-		data: DoctorAvailabilityResponseDTO[];
-	}>(`/availability`);
-	return data.data;
-}
-
-export async function createAvailability(dto: CreateDoctorAvailabilityDTO) {
-	console.log("🚀 Criando disponibilidade");
-	console.log("📍 URL:", `/availability`);
-	console.log("📦 Dados:", dto);
-	
-	const { data } = await axios.post<{
-		success: boolean;
-		data: DoctorAvailabilityResponseDTO;
-	}>(`/availability`, dto);
-	return data.data;
-}
-
-export async function updateAvailability(availabilityId: string, partial: Partial<CreateDoctorAvailabilityDTO>) {
-	console.log("✏️ Atualizando disponibilidade:", availabilityId);
-	console.log("📦 Dados:", partial);
-	
-	const { data } = await axios.put<{
-		success: boolean;
-		data: DoctorAvailabilityResponseDTO;
-	}>(`/availability/${availabilityId}`, partial);
-	return data.data;
-}
-
-export async function deleteAvailability(availabilityId: string) {
-	console.log("🗑️ Deletando disponibilidade:", availabilityId);
-	
-	const { data } = await axios.delete<{ 
-		success: boolean;
-		data: boolean;
-	}>(`/availability/${availabilityId}`);
-	return data.data;
-}
-
 // Service object for easier importing
 export const availabilityService = {
 	async createAvailability(dto: CreateDoctorAvailabilityDTO) {
@@ -101,14 +58,13 @@ export const availabilityService = {
 };
 
 // Export individual functions for backward compatibility
-export async function listDoctorAvailability(doctorId: string, date?: string) {
+export async function listDoctorAvailability(doctorId: string, date: string) {
 	console.log("📋 Listando disponibilidades do médico:", doctorId, "para a data:", date);
 	
-	const queryParams = date ? `?date=${date}` : '';
 	const { data } = await axios.get<{
 		success: boolean;
 		data: DoctorAvailabilityResponseDTO[];
-	}>(`/doctors/${doctorId}/availability${queryParams}`);
+	}>(`/doctors/${doctorId}/availability?date=${date}`);
 	return data.data;
 }
 
