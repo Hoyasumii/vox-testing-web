@@ -46,9 +46,11 @@ export default function AvailabilityPage() {
 	});
 
 	const loadAvailabilities = async () => {
+		if (!user?.id) return;
+		
 		setLoading(true);
 		try {
-			const data = await listMyAvailability();
+			const data = await listMyAvailability(user.id);
 			setItems(data as AvailabilityUI[]);
 		} catch {
 			push({ message: "Falha ao carregar disponibilidades", type: "error" });
@@ -59,9 +61,11 @@ export default function AvailabilityPage() {
 
 	useEffect(() => {
 		const loadData = async () => {
+			if (!user?.id) return;
+			
 			setLoading(true);
 			try {
-				const data = await listMyAvailability();
+				const data = await listMyAvailability(user.id);
 				setItems(data as AvailabilityUI[]);
 			} catch {
 				push({ message: "Falha ao carregar disponibilidades", type: "error" });
@@ -71,7 +75,7 @@ export default function AvailabilityPage() {
 		};
 		
 		loadData();
-	}, [push]);
+	}, [push, user?.id]);
 
 	const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
 		e.preventDefault();
@@ -89,9 +93,14 @@ export default function AvailabilityPage() {
 		}
 		
 		setFieldErrors({});
+		if (!user?.id) {
+			push({ message: "Usuário não encontrado", type: "error" });
+			return;
+		}
+		
 		try {
 			setSubmitting(true);
-			await createAvailability(parsed.data);
+			await createAvailability({ ...parsed.data, doctorId: user.id });
 			push({ message: "Disponibilidade criada com sucesso", type: "success" });
 			
 			// Reset form
@@ -126,8 +135,13 @@ export default function AvailabilityPage() {
 	};
 
 	const handleSaveEdit = async (itemId: string) => {
+		if (!user?.id) {
+			push({ message: "Usuário não encontrado", type: "error" });
+			return;
+		}
+		
 		try {
-			await updateAvailability(itemId, editValues);
+			await updateAvailability(user.id, itemId, editValues);
 			push({ message: "Disponibilidade atualizada", type: "success" });
 			setEditingId(null);
 			await loadAvailabilities();
@@ -141,8 +155,13 @@ export default function AvailabilityPage() {
 			return;
 		}
 		
+		if (!user?.id) {
+			push({ message: "Usuário não encontrado", type: "error" });
+			return;
+		}
+		
 		try {
-			await deleteAvailability(itemId);
+			await deleteAvailability(user.id, itemId);
 			push({ message: "Disponibilidade excluída", type: "success" });
 			await loadAvailabilities();
 		} catch {

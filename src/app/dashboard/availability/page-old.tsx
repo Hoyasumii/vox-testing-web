@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/contexts/ToastContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 type AvailabilityUI = {
 	id: string;
@@ -25,6 +26,7 @@ export default function AvailabilityPage() {
 	const [loading, setLoading] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
 	const { push } = useToast();
+	const { user } = useAuth();
 	const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [editValues, setEditValues] = useState<{
@@ -35,9 +37,11 @@ export default function AvailabilityPage() {
 
 	useEffect(() => {
 		(async () => {
+			if (!user?.id) return;
+			
 			setLoading(true);
 			try {
-				const data = await listMyAvailability();
+				const data = await listMyAvailability(user.id);
 				setItems(data as AvailabilityUI[]);
 			} catch {
 				push({ message: "Falha ao carregar disponibilidades", type: "error" });
@@ -45,7 +49,7 @@ export default function AvailabilityPage() {
 				setLoading(false);
 			}
 		})();
-	}, [push]);
+	}, [push, user?.id]);
 
 	const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
 		e.preventDefault();
@@ -68,14 +72,19 @@ export default function AvailabilityPage() {
 			return;
 		}
 		setFieldErrors({});
+		if (!user?.id) {
+			push({ message: "Usuário não encontrado", type: "error" });
+			return;
+		}
+		
 		try {
 			setSubmitting(true);
-			await createAvailability(parsed.data);
+			await createAvailability({ ...parsed.data, doctorId: user.id });
 			push({ message: "Disponibilidade criada", type: "success" });
 			e.currentTarget.reset();
 			// recarrega lista
 			try {
-				const data = await listMyAvailability();
+				const data = await listMyAvailability(user.id);
 				setItems(data as AvailabilityUI[]);
 			} catch {
 				/* ignore */
@@ -231,8 +240,13 @@ export default function AvailabilityPage() {
 											type="button"
 											className="text-xs px-2 py-0.5 border rounded"
 											onClick={async () => {
+												if (!user?.id) {
+													push({ message: "Usuário não encontrado", type: "error" });
+													return;
+												}
+												
 												try {
-													await updateAvailability(a.id, editValues);
+													await updateAvailability(user.id, a.id, editValues);
 													setItems((prev) =>
 														prev.map((p) =>
 															p.id === a.id ? { ...p, ...editValues } : p,
@@ -278,8 +292,13 @@ export default function AvailabilityPage() {
 											className="text-xs px-2 py-0.5 border rounded"
 											onClick={async () => {
 												if (!confirm("Remover disponibilidade?")) return;
+												if (!user?.id) {
+													push({ message: "Usuário não encontrado", type: "error" });
+													return;
+												}
+												
 												try {
-													await deleteAvailability(a.id);
+													await deleteAvailability(user.id, a.id);
 													setItems((prev) => prev.filter((p) => p.id !== a.id));
 													push({ message: "Removido", type: "success" });
 												} catch {

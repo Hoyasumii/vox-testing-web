@@ -80,12 +80,25 @@ export default function AppointmentsPage() {
 			return;
 		}
 
+		// Encontrar a data da disponibilidade selecionada
+		const availabilityData = availability.find(a => a.id === selectedSlot.availabilityId);
+		if (!availabilityData) {
+			push({ message: "Dados de disponibilidade não encontrados", type: "error" });
+			return;
+		}
+
+		// Construir a data/hora ISO
+		const [hours, minutes] = selectedSlot.time.split(":");
+		const scheduledDate = new Date(availabilityData.date);
+		scheduledDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+		const scheduledAt = scheduledDate.toISOString();
+
 		try {
 			setBooking(true);
 			await createSchedule({
 				availabilityId: selectedSlot.availabilityId,
-				slotTime: selectedSlot.time,
-				notes: notes || undefined,
+				doctorId: selectedDoctor.id,
+				scheduledAt: scheduledAt,
 			});
 			
 			push({ 
@@ -159,12 +172,12 @@ export default function AppointmentsPage() {
 									<Label htmlFor="date-filter">
 										Data (opcional - deixe em branco para ver todas)
 									</Label>
-									<input
+									<Input
 										id="date-filter"
 										type="date"
 										value={date}
 										onChange={(e) => setDate(e.target.value)}
-										className="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
+										className="w-full"
 										min={new Date().toISOString().split('T')[0]}
 									/>
 								</div>

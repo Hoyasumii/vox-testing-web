@@ -26,7 +26,7 @@ function TestAuthProvider({ children, mockUser }: TestAuthProviderProps) {
       token: 'mock-token',
       signIn: vi.fn(),
       signOut: vi.fn(),
-      isLoading: false
+      loading: false
     };
     
     return (
