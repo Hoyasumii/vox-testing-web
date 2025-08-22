@@ -12,6 +12,8 @@ export const UserPasswordDTO = z
 	.refine((password) => /[-!@#$%^&*(),.?":{}|<>]/.test(password), {
 		message: "A senha deve conter pelo menos um caractere especial.",
 	})
-	.describe("Senha do usuário que deve conter no mínimo 7 caracteres, incluindo ao menos uma letra maiúscula, uma minúscula e um caractere especial");
+	.describe(
+		"Senha do usuário que deve conter no mínimo 7 caracteres, incluindo ao menos uma letra maiúscula, uma minúscula e um caractere especial",
+	);
 
 export type UserPasswordDTO = z.infer<typeof UserPasswordDTO>;
